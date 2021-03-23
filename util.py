@@ -166,20 +166,24 @@ def nn_interpolation(im, sf):
     return np.array(pil_im.resize((im.shape[1] * sf, im.shape[0] * sf), Image.NEAREST), dtype=im.dtype)
 
 
-def analytic_kernel(k):
+def analytic_kernel(k,scale):
     """Calculate the X4 kernel from the X2 kernel (for proof see appendix in paper)"""
-    k_size = k.shape[0]
-    # Calculate the big kernels size
-    big_k = np.zeros((3 * k_size - 2, 3 * k_size - 2))
-    # Loop over the small kernel to fill the big one
-    for r in range(k_size):
-        for c in range(k_size):
-            big_k[2 * r:2 * r + k_size, 2 * c:2 * c + k_size] += k[r, c] * k
-    # Crop the edges of the big kernel to ignore very small values and increase run time of SR
-    crop = k_size // 2
-    cropped_big_k = big_k[crop:-crop, crop:-crop]
-    # Normalize to 1
-    return cropped_big_k / cropped_big_k.sum()
+    
+    for i in range(scale//4):
+        k_size = k.shape[0]
+        # Calculate the big kernels size
+        big_k = np.zeros((3 * k_size - 2, 3 * k_size - 2))
+        # Loop over the small kernel to fill the big one
+        for r in range(k_size):
+            for c in range(k_size):
+                big_k[2 * r:2 * r + k_size, 2 * c:2 * c + k_size] += k[r, c] * k
+        # Crop the edges of the big kernel to ignore very small values and increase run time of SR
+        crop = k_size // 2
+        cropped_big_k = big_k[crop:-crop, crop:-crop]
+        # Normalize to 1
+        k = cropped_big_k / cropped_big_k.sum()
+    return k
+
 
 
 def kernel_shift(kernel, sf):
@@ -212,21 +216,26 @@ def kernel_shift(kernel, sf):
 def save_final_kernel(k_2, conf):
     """saves the final kernel and the analytic kernel to the results folder"""
     sio.savemat(os.path.join(conf.output_dir_path, '%s_kernel_x2.mat' % conf.img_name), {'Kernel': k_2})
+    plt.imsave(os.path.join(conf.output_dir_path, '%s_kernel_x2.png' % conf.img_name) ,k_2,cmap="gray")
     if conf.X4:
-        k_4 = analytic_kernel(k_2)
+        k_4 = analytic_kernel(k_2,4)
         sio.savemat(os.path.join(conf.output_dir_path, '%s_kernel_x4.mat' % conf.img_name), {'Kernel': k_4})
-
-
+        plt.imsave(os.path.join(conf.output_dir_path, '%s_kernel_x4.png' % conf.img_name) ,k_4,cmap="gray")
+    if conf.X8:
+        k_8 = analytic_kernel(k_2,8)
+        sio.savemat(os.path.join(conf.output_dir_path, '%s_kernel_x8.mat' % conf.img_name), {'Kernel': k_8})
+        plt.imsave(os.path.join(conf.output_dir_path, '%s_kernel_x8.png' % conf.img_name) ,k_8,cmap="gray")
+        
 def run_zssr(k_2, conf):
     """Performs ZSSR with estimated kernel for wanted scale factor"""
     if conf.do_ZSSR:
         start_time = time.time()
         print('~' * 30 + '\nRunning ZSSR X%d...' % (4 if conf.X4 else 2))
         if conf.X4:
-            sr = ZSSR(conf.input_image_path, scale_factor=[[2, 2], [4, 4]], kernels=[k_2, analytic_kernel(k_2)], is_real_img=conf.real_image, noise_scale=conf.noise_scale).run()
+            sr = ZSSR(conf.input_image_path, scale_factor=[[2, 2], [4, 4]], kernels=[k_2, analytic_kernel(k_2)]).run()
         else:
-            sr = ZSSR(conf.input_image_path, scale_factor=2, kernels=[k_2], is_real_img=conf.real_image, noise_scale=conf.noise_scale).run()
+            sr = ZSSR(conf.input_image_path, scale_factor=2, kernels=[k_2]).run()
         max_val = 255 if sr.dtype == 'uint8' else 1.
-        plt.imsave(os.path.join(conf.output_dir_path, 'ZSSR_%s.png' % conf.img_name), sr, vmin=0, vmax=max_val, dpi=1)
+        plt.imsave(os.path.join(conf.output_dir_path, 'ZSSR_%s' % conf.img_name), sr, vmin=0, vmax=max_val, dpi=1)
         runtime = int(time.time() - start_time)
         print('Completed! runtime=%d:%d\n' % (runtime // 60, runtime % 60) + '~' * 30)

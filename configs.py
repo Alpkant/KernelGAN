@@ -17,7 +17,8 @@ class Config:
         # Sizes
         self.parser.add_argument('--input_crop_size', type=int, default=64, help='Generators crop size')
         self.parser.add_argument('--scale_factor', type=float, default=0.5, help='The downscaling scale factor')
-        self.parser.add_argument('--X4', action='store_true', help='The wanted SR scale factor')
+        self.parser.add_argument('--X4', action='store_true', help='The wanted SR scale factor x4')
+        self.parser.add_argument('--X8', action='store_true', help='The wanted SR scale factor x8')
 
         # Network architecture
         self.parser.add_argument('--G_chan', type=int, default=64, help='# of channels in hidden layer in the G')
@@ -70,7 +71,7 @@ class Config:
 
     def set_output_directory(self):
         """Define the output directory name and create the folder"""
-        self.conf.output_dir_path = os.path.join(self.conf.output_dir_path, self.conf.img_name)
+        self.conf.output_dir_path = os.path.join('Results', self.conf.img_name)
         # In case the folder exists - stack 'l's to the folder name
         while os.path.isdir(self.conf.output_dir_path):
             self.conf.output_dir_path += 'l'
